@@ -1,0 +1,4 @@
+aiogram==3.31.0
+openai==3.6.0
+psycopg[binary,pool]==3.3.4
+pydantic-settings==2.15.0
