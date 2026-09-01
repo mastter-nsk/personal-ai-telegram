@@ -12,6 +12,7 @@ Current milestone:
 - `/remember`
 - `/forget`
 - automatic memory through an OpenAI function tool
+- built-in OpenAI web search when current information is needed
 - automatic database schema initialization
 
 ## Required environment variables

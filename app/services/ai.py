@@ -54,6 +54,10 @@ class AIService:
     def _tools() -> list[dict]:
         return [
             {
+                "type": "web_search",
+                "search_context_size": "medium",
+            },
+            {
                 "type": "function",
                 "name": "save_memory",
                 "description": (
