@@ -7,6 +7,18 @@ from app.services.memory import MemoryService
 
 router = Router(name="commands")
 
+HELP_TEXT = (
+    "I can chat, remember useful facts about you, search the web when current "
+    "information is needed, understand voice messages and photos, and analyze documents.\n\n"
+    "Commands:\n"
+    "/new — start a fresh conversation\n"
+    "/memory — show long-term memory\n"
+    "/remember text — save a memory manually\n"
+    "/forget ID — delete a saved memory\n"
+    "/help — show this help\n\n"
+    "Long-term memory survives /new."
+)
+
 
 async def _ensure_owner(message: Message, db: Database) -> dict | None:
     if message.from_user is None:
@@ -31,18 +43,22 @@ async def start_handler(message: Message, db: Database) -> None:
     if user is None:
         return
 
+    name = message.from_user.first_name if message.from_user else None
+    greeting = f"Hi, {name}!" if name else "Hi!"
+
     await message.answer(
-        "✅ Personal AI is running.\n"
-        "🔐 Owner access confirmed.\n"
-        "🐘 PostgreSQL is connected.\n"
-        "🤖 AI chat is ready.\n"
-        "🧠 Long-term memory is ready.\n\n"
-        "Commands:\n"
-        "/new — fresh conversation\n"
-        "/memory — show saved memories\n"
-        "/remember text — save a memory\n"
-        "/forget ID — delete a memory"
+        f"{greeting} Your Personal AI is ready. 🤖\n\n"
+        f"{HELP_TEXT}"
     )
+
+
+@router.message(Command("help"))
+async def help_handler(message: Message, db: Database) -> None:
+    user = await _ensure_owner(message, db)
+    if user is None:
+        return
+
+    await message.answer(HELP_TEXT)
 
 
 @router.message(Command("new"))
@@ -53,8 +69,7 @@ async def new_handler(message: Message, db: Database) -> None:
 
     await db.new_conversation(user["id"])
     await message.answer(
-        "🆕 New conversation started.\n"
-        "Long-term memory is preserved."
+        "🆕 New conversation started. Long-term memory is preserved."
     )
 
 

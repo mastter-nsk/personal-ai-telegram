@@ -30,6 +30,11 @@ class AIService:
                 f"The owner's interests include: {self.settings.interests.strip()}."
             )
 
+        if self.settings.timezone.strip():
+            parts.append(
+                f"The owner's timezone is {self.settings.timezone.strip()}."
+            )
+
         parts.extend(
             [
                 memory_text,

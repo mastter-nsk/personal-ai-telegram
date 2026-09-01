@@ -2,6 +2,7 @@ import logging
 import sys
 
 from aiogram import Bot, Dispatcher
+from aiogram.types import BotCommand
 
 from app.config import get_settings
 from app.db import Database
@@ -11,6 +12,8 @@ from app.services.ai import AIService
 from app.services.memory import MemoryService
 
 logger = logging.getLogger(__name__)
+
+APP_VERSION = "0.1.0-rc1"
 
 
 async def run() -> None:
@@ -39,6 +42,8 @@ async def run() -> None:
     dp.include_router(text.router)
 
     try:
+        logger.info("Starting Personal AI Assistant %s", APP_VERSION)
+
         logger.info("Opening PostgreSQL connection pool")
         await db.open()
 
@@ -51,6 +56,18 @@ async def run() -> None:
         me = await bot.get_me()
         logger.info("Telegram bot connected: @%s", me.username or me.id)
 
+        await bot.set_my_commands(
+            [
+                BotCommand(command="start", description="Open Personal AI"),
+                BotCommand(command="new", description="Start a fresh conversation"),
+                BotCommand(command="memory", description="Show long-term memory"),
+                BotCommand(command="remember", description="Save a memory manually"),
+                BotCommand(command="forget", description="Delete a saved memory"),
+                BotCommand(command="help", description="Show help"),
+            ]
+        )
+
+        # Long polling is used; make sure an old webhook cannot block getUpdates.
         await bot.delete_webhook(drop_pending_updates=False)
 
         logger.info(

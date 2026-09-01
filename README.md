@@ -1,54 +1,27 @@
-# Personal AI Assistant for Telegram — v0.1
+# Personal AI Assistant for Telegram
 
-Current milestone:
+Your own private AI assistant in Telegram with persistent memory, web search,
+voice transcription, vision, and document understanding.
 
-- owner-only Telegram bot
-- PostgreSQL persistence
-- OpenAI Responses API text chat
-- conversation history
-- `/new` starts a fresh conversation
+Designed to deploy on Railway with a Python service + PostgreSQL.
+
+## v0.1 features
+
+- private access restricted to `OWNER_TELEGRAM_ID`
+- OpenAI text chat
+- PostgreSQL conversation history
 - persistent long-term memory
-- `/memory`
-- `/remember`
-- `/forget`
-- automatic memory through an OpenAI function tool
-- built-in OpenAI web search when current information is needed
-- Telegram voice messages → OpenAI transcription → AI reply
-- Telegram photo analysis with vision
+- automatic memory for useful durable facts
+- `/new`, `/memory`, `/remember`, `/forget`, `/help`
+- built-in web search for current information
+- Telegram voice message transcription
+- photo / image understanding
 - document analysis
-- automatic database schema initialization
+- automatic PostgreSQL schema initialization
+- Telegram long polling: no public domain or webhook required
 
-## Required environment variables
+Supported document types include:
 
-- `TELEGRAM_BOT_TOKEN`
-- `OWNER_TELEGRAM_ID`
-- `OPENAI_API_KEY`
-- `DATABASE_URL`
-
-## Optional variables
-
-- `BOT_NAME`
-- `OWNER_NAME`
-- `PERSONALITY`
-- `INTERESTS`
-- `TIMEZONE`
-- `OPENAI_MODEL`
-- `TRANSCRIPTION_MODEL`
-- `CONTEXT_MESSAGES`
-
-## Railway
-
-Use:
-
-`DATABASE_URL=${{Postgres.DATABASE_URL}}`
-
-Telegram long polling is used, so no public domain or webhook is required.
-
-## Supported Telegram input
-
-- text messages
-- voice messages
-- photos with or without a caption
 - PDF
 - TXT / Markdown / JSON / HTML / XML
 - DOC / DOCX / RTF / ODT
@@ -56,13 +29,103 @@ Telegram long polling is used, so no public domain or webhook is required.
 - CSV / TSV
 - XLS / XLSX
 
-Documents are passed directly to the OpenAI Responses API as file inputs.
-No local document parser or additional database is required.
+## Railway deployment
 
-## Memory commands
+The intended Railway Template contains two services:
 
-- `/memory` — list stored memories
-- `/remember I prefer concise answers` — save manually
-- `/forget 3` — remove memory with ID 3
+1. this Python application
+2. PostgreSQL
 
-`/new` clears current conversation context but keeps long-term memory.
+The user should only need to enter three values:
+
+```env
+TELEGRAM_BOT_TOKEN=
+OWNER_TELEGRAM_ID=
+OPENAI_API_KEY=
+```
+
+The application service should receive the database connection automatically
+from the PostgreSQL service:
+
+```env
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+```
+
+Optional variables:
+
+```env
+BOT_NAME=Personal AI
+OWNER_NAME=
+PERSONALITY=You are a helpful, natural and personal AI assistant.
+INTERESTS=
+TIMEZONE=UTC
+OPENAI_MODEL=gpt-5.6-luna
+TRANSCRIPTION_MODEL=gpt-4o-mini-transcribe
+CONTEXT_MESSAGES=20
+```
+
+## Security model
+
+`OWNER_TELEGRAM_ID` is enforced in an aiogram outer middleware before the
+application's message handlers run. Unauthorized Telegram users therefore do
+not reach OpenAI calls, media downloads, or normal handler database writes.
+
+API keys must be stored only in Railway Variables (or a local `.env` file).
+Never commit real keys to GitHub. `.env` is excluded by `.gitignore`.
+
+OpenAI Responses requests use `store=False`. Conversation history and
+long-term memory are stored in the user's PostgreSQL service.
+
+## First-run test
+
+After deployment:
+
+1. send `/start`
+2. send a normal text message
+3. send `/remember I like concise answers`
+4. send `/new`
+5. ask what preference the assistant remembers
+6. send a voice message
+7. send a photo
+8. send a small PDF or DOCX
+9. ask a question that requires current web information
+
+If all nine tests work, the clean deployment is ready to be turned into a
+Railway Template.
+
+## Local development
+
+Copy `.env.example` to `.env`, fill the required values and provide a
+PostgreSQL connection string.
+
+Install:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run:
+
+```bash
+python main.py
+```
+
+## Architecture
+
+```text
+Telegram
+   |
+Owner-only middleware
+   |
+Handlers (text / voice / image / document / commands)
+   |
+OpenAI Responses API + transcription
+   |
+PostgreSQL (conversations + long-term memory)
+```
+
+No n8n, Redis, FastAPI, Flask, or separate vector database is required for v0.1.
+
+## License
+
+MIT

@@ -1,12 +1,12 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     telegram_bot_token: str = Field(validation_alias="TELEGRAM_BOT_TOKEN")
-    owner_telegram_id: int = Field(validation_alias="OWNER_TELEGRAM_ID")
+    owner_telegram_id: int = Field(gt=0, validation_alias="OWNER_TELEGRAM_ID")
     openai_api_key: str = Field(validation_alias="OPENAI_API_KEY")
     database_url: str = Field(validation_alias="DATABASE_URL")
 
@@ -39,6 +39,20 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @field_validator(
+        "telegram_bot_token",
+        "openai_api_key",
+        "database_url",
+        "openai_model",
+        "transcription_model",
+        mode="before",
+    )
+    @classmethod
+    def reject_blank_required_strings(cls, value: object) -> object:
+        if isinstance(value, str) and not value.strip():
+            raise ValueError("must not be empty")
+        return value
 
 
 @lru_cache
