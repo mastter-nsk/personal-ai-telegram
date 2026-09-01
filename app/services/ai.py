@@ -70,15 +70,13 @@ class AIService:
                     "properties": {
                         "content": {
                             "type": "string",
-                            "description": (
-                                "One concise standalone fact about the owner."
-                            ),
+                            "description": "One concise standalone fact about the owner.",
                         }
                     },
                     "required": ["content"],
                     "additionalProperties": False,
                 },
-            }
+            },
         ]
 
     @staticmethod
@@ -86,6 +84,18 @@ class AIService:
         if hasattr(item, "model_dump"):
             return item.model_dump(exclude_none=True)
         return dict(item)
+
+    async def transcribe_voice(self, audio_bytes: bytes) -> str:
+        transcription = await self.client.audio.transcriptions.create(
+            model=self.settings.transcription_model,
+            file=("voice.ogg", audio_bytes, "audio/ogg"),
+        )
+
+        text = (transcription.text or "").strip()
+        if not text:
+            raise ValueError("Transcription returned empty text.")
+
+        return text
 
     async def reply(
         self,
@@ -109,8 +119,6 @@ class AIService:
             store=False,
         )
 
-        # A single user turn should rarely require more than one memory call
-        # round, but allow a few rounds while preventing accidental loops.
         for _ in range(3):
             function_calls = [
                 item

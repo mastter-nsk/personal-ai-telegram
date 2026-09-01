@@ -13,6 +13,7 @@ Current milestone:
 - `/forget`
 - automatic memory through an OpenAI function tool
 - built-in OpenAI web search when current information is needed
+- Telegram voice messages → OpenAI transcription → AI reply
 - automatic database schema initialization
 
 ## Required environment variables
@@ -21,6 +22,17 @@ Current milestone:
 - `OWNER_TELEGRAM_ID`
 - `OPENAI_API_KEY`
 - `DATABASE_URL`
+
+## Optional variables
+
+- `BOT_NAME`
+- `OWNER_NAME`
+- `PERSONALITY`
+- `INTERESTS`
+- `TIMEZONE`
+- `OPENAI_MODEL`
+- `TRANSCRIPTION_MODEL` (default: `gpt-4o-mini-transcribe`)
+- `CONTEXT_MESSAGES`
 
 ## Railway
 
@@ -36,4 +48,4 @@ Telegram long polling is used, so no public domain or webhook is required.
 - `/remember I prefer concise answers` — save manually
 - `/forget 3` — remove memory with ID 3
 
-`/new` clears the current conversation context but does not delete long-term memory.
+`/new` clears current conversation context but keeps long-term memory.

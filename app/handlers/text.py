@@ -39,18 +39,18 @@ def split_for_telegram(text: str, limit: int = 4000) -> list[str]:
     return chunks
 
 
-@router.message(F.text & ~F.text.startswith("/"))
-async def text_handler(
+async def process_user_text(
     message: Message,
+    user_text: str,
     db: Database,
     settings: Settings,
     ai: AIService,
     memory: MemoryService,
 ) -> None:
-    if message.from_user is None or not message.text:
+    if message.from_user is None:
         return
 
-    user_text = message.text.strip()
+    user_text = user_text.strip()
     if not user_text:
         return
 
@@ -86,7 +86,7 @@ async def text_handler(
             ),
         )
     except Exception:
-        logger.exception("OpenAI request failed")
+        logger.exception("OpenAI response request failed")
         await message.answer(
             "⚠️ I couldn't reach the AI service. Please try again in a moment."
         )
@@ -100,3 +100,24 @@ async def text_handler(
 
     for chunk in split_for_telegram(answer):
         await message.answer(chunk)
+
+
+@router.message(F.text & ~F.text.startswith("/"))
+async def text_handler(
+    message: Message,
+    db: Database,
+    settings: Settings,
+    ai: AIService,
+    memory: MemoryService,
+) -> None:
+    if not message.text:
+        return
+
+    await process_user_text(
+        message=message,
+        user_text=message.text,
+        db=db,
+        settings=settings,
+        ai=ai,
+        memory=memory,
+    )
