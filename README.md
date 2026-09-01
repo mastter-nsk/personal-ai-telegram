@@ -14,6 +14,7 @@ Current milestone:
 - automatic memory through an OpenAI function tool
 - built-in OpenAI web search when current information is needed
 - Telegram voice messages → OpenAI transcription → AI reply
+- Telegram photo analysis with vision
 - automatic database schema initialization
 
 ## Required environment variables
@@ -31,7 +32,7 @@ Current milestone:
 - `INTERESTS`
 - `TIMEZONE`
 - `OPENAI_MODEL`
-- `TRANSCRIPTION_MODEL` (default: `gpt-4o-mini-transcribe`)
+- `TRANSCRIPTION_MODEL`
 - `CONTEXT_MESSAGES`
 
 ## Railway
@@ -41,6 +42,12 @@ Use:
 `DATABASE_URL=${{Postgres.DATABASE_URL}}`
 
 Telegram long polling is used, so no public domain or webhook is required.
+
+## Supported input so far
+
+- text messages
+- voice messages
+- photos with or without a caption
 
 ## Memory commands
 

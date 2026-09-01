@@ -97,19 +97,12 @@ class AIService:
 
         return text
 
-    async def reply(
+    async def _complete(
         self,
-        history: list[dict],
-        user_text: str,
+        conversation_input: list[dict],
         memory_text: str,
         save_memory: SaveMemoryCallback,
     ) -> str:
-        conversation_input: list[dict] = [
-            {"role": item["role"], "content": item["content"]}
-            for item in history
-        ]
-        conversation_input.append({"role": "user", "content": user_text})
-
         response = await self.client.responses.create(
             model=self.settings.openai_model,
             instructions=self._instructions(memory_text),
@@ -183,3 +176,58 @@ class AIService:
             return answer
 
         return "I couldn't complete that request. Please try again."
+
+    async def reply(
+        self,
+        history: list[dict],
+        user_text: str,
+        memory_text: str,
+        save_memory: SaveMemoryCallback,
+    ) -> str:
+        conversation_input: list[dict] = [
+            {"role": item["role"], "content": item["content"]}
+            for item in history
+        ]
+        conversation_input.append({"role": "user", "content": user_text})
+
+        return await self._complete(
+            conversation_input=conversation_input,
+            memory_text=memory_text,
+            save_memory=save_memory,
+        )
+
+    async def reply_with_image(
+        self,
+        history: list[dict],
+        user_text: str,
+        image_data_url: str,
+        memory_text: str,
+        save_memory: SaveMemoryCallback,
+    ) -> str:
+        conversation_input: list[dict] = [
+            {"role": item["role"], "content": item["content"]}
+            for item in history
+        ]
+
+        conversation_input.append(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": user_text,
+                    },
+                    {
+                        "type": "input_image",
+                        "image_url": image_data_url,
+                        "detail": "auto",
+                    },
+                ],
+            }
+        )
+
+        return await self._complete(
+            conversation_input=conversation_input,
+            memory_text=memory_text,
+            save_memory=save_memory,
+        )
