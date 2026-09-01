@@ -1,7 +1,13 @@
-# Personal AI Assistant for Telegram — v0.1 core
+# Personal AI Assistant for Telegram — v0.1
 
-Current milestone: secure Telegram owner whitelist + PostgreSQL initialization.
-OpenAI handlers are intentionally not wired yet.
+Current milestone:
+
+- private owner-only Telegram bot
+- PostgreSQL persistence
+- OpenAI Responses API text chat
+- conversation history
+- `/new` starts a fresh conversation
+- automatic database schema initialization
 
 ## Required environment variables
 
@@ -10,20 +16,20 @@ OpenAI handlers are intentionally not wired yet.
 - `OPENAI_API_KEY`
 - `DATABASE_URL`
 
-## Local run
+## Optional variables
 
-1. Copy `.env.example` to `.env`
-2. Fill the required values
-3. Create a PostgreSQL database and put its connection URL in `DATABASE_URL`
-4. Install dependencies:
-   `pip install -r requirements.txt`
-5. Run:
-   `python main.py`
+- `BOT_NAME`
+- `OWNER_NAME`
+- `PERSONALITY`
+- `INTERESTS`
+- `TIMEZONE`
+- `OPENAI_MODEL` (default: `gpt-5.6-luna`)
+- `CONTEXT_MESSAGES` (default: `20`)
 
-At startup the application automatically creates its PostgreSQL tables.
+## Railway
 
-## Current behavior
+Set:
 
-- `/start` from the owner creates/updates the owner record and confirms DB connectivity.
-- Updates from any other Telegram account are silently rejected by an update-level outer middleware.
-- No OpenAI call exists yet, so this milestone can be tested without spending API credits.
+`DATABASE_URL=${{Postgres.DATABASE_URL}}`
+
+Telegram long polling is used, so no public domain or webhook is required.

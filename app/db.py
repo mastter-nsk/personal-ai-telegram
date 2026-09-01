@@ -24,7 +24,6 @@ class Database:
     async def init_schema(self) -> None:
         schema_path = Path(__file__).with_name("schema.sql")
         schema_sql = schema_path.read_text(encoding="utf-8")
-
         async with self.pool.connection() as conn:
             await conn.execute(schema_sql)
 
@@ -55,18 +54,102 @@ class Database:
                 (telegram_id, first_name, username),
             )
             user = await result.fetchone()
-
-            await conn.execute(
-                '''
-                INSERT INTO conversations (user_id)
-                SELECT %s
-                WHERE NOT EXISTS (
-                    SELECT 1
-                    FROM conversations
-                    WHERE user_id = %s AND is_active = TRUE
-                )
-                ''',
-                (user["id"], user["id"]),
-            )
-
+            await self._ensure_active_conversation(conn, user["id"])
             return user
+
+    async def _ensure_active_conversation(self, conn, user_id: int) -> int:
+        result = await conn.execute(
+            '''
+            SELECT id
+            FROM conversations
+            WHERE user_id = %s AND is_active = TRUE
+            LIMIT 1
+            ''',
+            (user_id,),
+        )
+        row = await result.fetchone()
+        if row:
+            return row["id"]
+
+        result = await conn.execute(
+            '''
+            INSERT INTO conversations (user_id, is_active)
+            VALUES (%s, TRUE)
+            RETURNING id
+            ''',
+            (user_id,),
+        )
+        row = await result.fetchone()
+        return row["id"]
+
+    async def get_active_conversation_id(self, user_id: int) -> int:
+        async with self.pool.connection() as conn:
+            return await self._ensure_active_conversation(conn, user_id)
+
+    async def new_conversation(self, user_id: int) -> int:
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    '''
+                    UPDATE conversations
+                    SET is_active = FALSE
+                    WHERE user_id = %s AND is_active = TRUE
+                    ''',
+                    (user_id,),
+                )
+                result = await conn.execute(
+                    '''
+                    INSERT INTO conversations (user_id, is_active)
+                    VALUES (%s, TRUE)
+                    RETURNING id
+                    ''',
+                    (user_id,),
+                )
+                row = await result.fetchone()
+                return row["id"]
+
+    async def get_recent_messages(
+        self,
+        conversation_id: int,
+        limit: int,
+    ) -> list[dict]:
+        async with self.pool.connection() as conn:
+            result = await conn.execute(
+                '''
+                SELECT role, content
+                FROM (
+                    SELECT id, role, content, created_at
+                    FROM messages
+                    WHERE conversation_id = %s
+                      AND role IN ('user', 'assistant')
+                    ORDER BY created_at DESC, id DESC
+                    LIMIT %s
+                ) recent
+                ORDER BY created_at ASC, id ASC
+                ''',
+                (conversation_id, limit),
+            )
+            return list(await result.fetchall())
+
+    async def save_exchange(
+        self,
+        conversation_id: int,
+        user_text: str,
+        assistant_text: str,
+    ) -> None:
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    '''
+                    INSERT INTO messages (conversation_id, role, content)
+                    VALUES (%s, 'user', %s)
+                    ''',
+                    (conversation_id, user_text),
+                )
+                await conn.execute(
+                    '''
+                    INSERT INTO messages (conversation_id, role, content)
+                    VALUES (%s, 'assistant', %s)
+                    ''',
+                    (conversation_id, assistant_text),
+                )

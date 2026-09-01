@@ -7,6 +7,7 @@ from app.config import get_settings
 from app.db import Database
 from app.handlers import commands, media, text
 from app.middleware.owner_only import OwnerOnlyMiddleware
+from app.services.ai import AIService
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,11 @@ async def run() -> None:
 
     settings = get_settings()
     db = Database(settings.database_url)
+    ai = AIService(settings)
+
     bot = Bot(token=settings.telegram_bot_token)
     dp = Dispatcher()
 
-    # Security boundary: every Telegram update is rejected here unless
-    # it belongs to OWNER_TELEGRAM_ID. This runs before our handlers,
-    # DB writes from handlers, file downloads, and future OpenAI calls.
     dp.update.outer_middleware(
         OwnerOnlyMiddleware(settings.owner_telegram_id)
     )
@@ -47,14 +47,17 @@ async def run() -> None:
         me = await bot.get_me()
         logger.info("Telegram bot connected: @%s", me.username or me.id)
 
-        # Long polling cannot be used while a webhook is active.
         await bot.delete_webhook(drop_pending_updates=False)
 
-        logger.info("Starting Telegram long polling")
+        logger.info(
+            "Starting Telegram long polling with model=%s",
+            settings.openai_model,
+        )
         await dp.start_polling(
             bot,
             db=db,
             settings=settings,
+            ai=ai,
             allowed_updates=dp.resolve_used_update_types(),
         )
     finally:
