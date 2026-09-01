@@ -8,6 +8,7 @@ from app.db import Database
 from app.handlers import commands, media, text
 from app.middleware.owner_only import OwnerOnlyMiddleware
 from app.services.ai import AIService
+from app.services.memory import MemoryService
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +23,13 @@ async def run() -> None:
     settings = get_settings()
     db = Database(settings.database_url)
     ai = AIService(settings)
+    memory = MemoryService(db)
 
     bot = Bot(token=settings.telegram_bot_token)
     dp = Dispatcher()
 
+    # Security boundary: unauthorized Telegram users stop here,
+    # before handlers, DB writes, file downloads, and OpenAI calls.
     dp.update.outer_middleware(
         OwnerOnlyMiddleware(settings.owner_telegram_id)
     )
@@ -53,11 +57,13 @@ async def run() -> None:
             "Starting Telegram long polling with model=%s",
             settings.openai_model,
         )
+
         await dp.start_polling(
             bot,
             db=db,
             settings=settings,
             ai=ai,
+            memory=memory,
             allowed_updates=dp.resolve_used_update_types(),
         )
     finally:

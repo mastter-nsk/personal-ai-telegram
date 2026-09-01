@@ -7,6 +7,7 @@ from aiogram.types import Message
 from app.config import Settings
 from app.db import Database
 from app.services.ai import AIService
+from app.services.memory import MemoryService
 
 router = Router(name="text")
 logger = logging.getLogger(__name__)
@@ -16,7 +17,7 @@ def split_for_telegram(text: str, limit: int = 4000) -> list[str]:
     if len(text) <= limit:
         return [text]
 
-    chunks = []
+    chunks: list[str] = []
     remaining = text
 
     while len(remaining) > limit:
@@ -29,6 +30,7 @@ def split_for_telegram(text: str, limit: int = 4000) -> list[str]:
         chunk = remaining[:cut].strip()
         if chunk:
             chunks.append(chunk)
+
         remaining = remaining[cut:].strip()
 
     if remaining:
@@ -43,6 +45,7 @@ async def text_handler(
     db: Database,
     settings: Settings,
     ai: AIService,
+    memory: MemoryService,
 ) -> None:
     if message.from_user is None or not message.text:
         return
@@ -56,6 +59,7 @@ async def text_handler(
         first_name=message.from_user.first_name,
         username=message.from_user.username,
     )
+
     conversation_id = await db.get_active_conversation_id(user["id"])
 
     history = await db.get_recent_messages(
@@ -63,13 +67,24 @@ async def text_handler(
         limit=settings.context_messages,
     )
 
+    memories = await memory.list(user["id"])
+    memory_text = memory.format_for_prompt(memories)
+
     await message.bot.send_chat_action(
         chat_id=message.chat.id,
         action=ChatAction.TYPING,
     )
 
     try:
-        answer = await ai.reply(history=history, user_text=user_text)
+        answer = await ai.reply(
+            history=history,
+            user_text=user_text,
+            memory_text=memory_text,
+            save_memory=lambda content: memory.add_auto(
+                user["id"],
+                content,
+            ),
+        )
     except Exception:
         logger.exception("OpenAI request failed")
         await message.answer(

@@ -41,7 +41,7 @@ class Database:
     ) -> dict:
         async with self.pool.connection() as conn:
             result = await conn.execute(
-                '''
+                """
                 INSERT INTO users (telegram_id, first_name, username)
                 VALUES (%s, %s, %s)
                 ON CONFLICT (telegram_id)
@@ -50,7 +50,7 @@ class Database:
                     username = EXCLUDED.username,
                     updated_at = NOW()
                 RETURNING id, telegram_id, first_name, username
-                ''',
+                """,
                 (telegram_id, first_name, username),
             )
             user = await result.fetchone()
@@ -59,12 +59,12 @@ class Database:
 
     async def _ensure_active_conversation(self, conn, user_id: int) -> int:
         result = await conn.execute(
-            '''
+            """
             SELECT id
             FROM conversations
             WHERE user_id = %s AND is_active = TRUE
             LIMIT 1
-            ''',
+            """,
             (user_id,),
         )
         row = await result.fetchone()
@@ -72,11 +72,11 @@ class Database:
             return row["id"]
 
         result = await conn.execute(
-            '''
+            """
             INSERT INTO conversations (user_id, is_active)
             VALUES (%s, TRUE)
             RETURNING id
-            ''',
+            """,
             (user_id,),
         )
         row = await result.fetchone()
@@ -90,19 +90,19 @@ class Database:
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 await conn.execute(
-                    '''
+                    """
                     UPDATE conversations
                     SET is_active = FALSE
                     WHERE user_id = %s AND is_active = TRUE
-                    ''',
+                    """,
                     (user_id,),
                 )
                 result = await conn.execute(
-                    '''
+                    """
                     INSERT INTO conversations (user_id, is_active)
                     VALUES (%s, TRUE)
                     RETURNING id
-                    ''',
+                    """,
                     (user_id,),
                 )
                 row = await result.fetchone()
@@ -115,7 +115,7 @@ class Database:
     ) -> list[dict]:
         async with self.pool.connection() as conn:
             result = await conn.execute(
-                '''
+                """
                 SELECT role, content
                 FROM (
                     SELECT id, role, content, created_at
@@ -126,7 +126,7 @@ class Database:
                     LIMIT %s
                 ) recent
                 ORDER BY created_at ASC, id ASC
-                ''',
+                """,
                 (conversation_id, limit),
             )
             return list(await result.fetchall())
@@ -140,16 +140,85 @@ class Database:
         async with self.pool.connection() as conn:
             async with conn.transaction():
                 await conn.execute(
-                    '''
+                    """
                     INSERT INTO messages (conversation_id, role, content)
                     VALUES (%s, 'user', %s)
-                    ''',
+                    """,
                     (conversation_id, user_text),
                 )
                 await conn.execute(
-                    '''
+                    """
                     INSERT INTO messages (conversation_id, role, content)
                     VALUES (%s, 'assistant', %s)
-                    ''',
+                    """,
                     (conversation_id, assistant_text),
                 )
+
+    async def add_memory(
+        self,
+        user_id: int,
+        content: str,
+        source: str,
+    ) -> tuple[dict, bool]:
+        clean = " ".join(content.split()).strip()
+        if not clean:
+            raise ValueError("Memory cannot be empty")
+
+        async with self.pool.connection() as conn:
+            result = await conn.execute(
+                """
+                SELECT id, content, source, created_at
+                FROM memories
+                WHERE user_id = %s
+                  AND LOWER(content) = LOWER(%s)
+                LIMIT 1
+                """,
+                (user_id, clean),
+            )
+            existing = await result.fetchone()
+            if existing:
+                return existing, False
+
+            result = await conn.execute(
+                """
+                INSERT INTO memories (user_id, content, source)
+                VALUES (%s, %s, %s)
+                RETURNING id, content, source, created_at
+                """,
+                (user_id, clean, source),
+            )
+            return await result.fetchone(), True
+
+    async def list_memories(
+        self,
+        user_id: int,
+        limit: int = 50,
+    ) -> list[dict]:
+        async with self.pool.connection() as conn:
+            result = await conn.execute(
+                """
+                SELECT id, content, source, created_at
+                FROM memories
+                WHERE user_id = %s
+                ORDER BY id ASC
+                LIMIT %s
+                """,
+                (user_id, limit),
+            )
+            return list(await result.fetchall())
+
+    async def delete_memory(
+        self,
+        user_id: int,
+        memory_id: int,
+    ) -> bool:
+        async with self.pool.connection() as conn:
+            result = await conn.execute(
+                """
+                DELETE FROM memories
+                WHERE id = %s AND user_id = %s
+                RETURNING id
+                """,
+                (memory_id, user_id),
+            )
+            return await result.fetchone() is not None
