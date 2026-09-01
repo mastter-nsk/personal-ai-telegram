@@ -67,7 +67,7 @@ async def text_handler(
         limit=settings.context_messages,
     )
 
-    memories = await memory.list(user["id"])
+    memories = await memory.get_all(user["id"])
     memory_text = memory.format_for_prompt(memories)
 
     await message.bot.send_chat_action(

@@ -68,7 +68,7 @@ async def memory_handler(
     if user is None:
         return
 
-    memories = await memory.list(user["id"])
+    memories = await memory.get_all(user["id"])
 
     if not memories:
         await message.answer(

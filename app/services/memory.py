@@ -5,7 +5,7 @@ class MemoryService:
     def __init__(self, db: Database) -> None:
         self.db = db
 
-    async def list(self, user_id: int) -> list[dict]:
+    async def get_all(self, user_id: int) -> list[dict]:
         return await self.db.list_memories(user_id=user_id)
 
     async def add_manual(self, user_id: int, content: str) -> tuple[dict, bool]:
