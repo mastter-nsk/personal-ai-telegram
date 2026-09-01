@@ -15,6 +15,7 @@ Current milestone:
 - built-in OpenAI web search when current information is needed
 - Telegram voice messages → OpenAI transcription → AI reply
 - Telegram photo analysis with vision
+- document analysis
 - automatic database schema initialization
 
 ## Required environment variables
@@ -43,11 +44,20 @@ Use:
 
 Telegram long polling is used, so no public domain or webhook is required.
 
-## Supported input so far
+## Supported Telegram input
 
 - text messages
 - voice messages
 - photos with or without a caption
+- PDF
+- TXT / Markdown / JSON / HTML / XML
+- DOC / DOCX / RTF / ODT
+- PPT / PPTX
+- CSV / TSV
+- XLS / XLSX
+
+Documents are passed directly to the OpenAI Responses API as file inputs.
+No local document parser or additional database is required.
 
 ## Memory commands
 

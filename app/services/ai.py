@@ -43,7 +43,9 @@ class AIService:
                     "interests, relationships, recurring habits, important long-term "
                     "plans, or explicit requests to remember something. "
                     "Do not save ordinary questions, temporary details, passwords, "
-                    "API keys, authentication codes, financial credentials, or other secrets."
+                    "API keys, authentication codes, financial credentials, or other secrets. "
+                    "Do not automatically save facts merely found inside uploaded files or "
+                    "images unless the owner explicitly asks you to remember that information."
                 ),
             ]
         )
@@ -221,6 +223,43 @@ class AIService:
                         "type": "input_image",
                         "image_url": image_data_url,
                         "detail": "auto",
+                    },
+                ],
+            }
+        )
+
+        return await self._complete(
+            conversation_input=conversation_input,
+            memory_text=memory_text,
+            save_memory=save_memory,
+        )
+
+    async def reply_with_file(
+        self,
+        history: list[dict],
+        user_text: str,
+        filename: str,
+        file_data_url: str,
+        memory_text: str,
+        save_memory: SaveMemoryCallback,
+    ) -> str:
+        conversation_input: list[dict] = [
+            {"role": item["role"], "content": item["content"]}
+            for item in history
+        ]
+
+        conversation_input.append(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_file",
+                        "filename": filename,
+                        "file_data": file_data_url,
+                    },
+                    {
+                        "type": "input_text",
+                        "text": user_text,
                     },
                 ],
             }
