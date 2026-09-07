@@ -35,11 +35,11 @@ jobs:
           N8N_RC=$?
 
           if [ "$N8N_RC" -eq 0 ] && [ "$N8N_CODE" = "200" ]; then
-            REPORT="${REPORT}вњ… n8n / Postgres${NL}"
+            REPORT="${REPORT}✅ n8n / Postgres${NL}"
           else
             FAIL=1
             [ -z "$N8N_CODE" ] && N8N_CODE="no HTTP response"
-            REPORT="${REPORT}вќЊ n8n / Postgres вЂ” HTTP ${N8N_CODE}${NL}"
+            REPORT="${REPORT}❌ n8n / Postgres — HTTP ${N8N_CODE}${NL}"
           fi
 
           TG_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 20             --output /tmp/tg.json --write-out '%{http_code}'             "https://api.telegram.org/bot${MAGIC_BOT_TOKEN}/getMe" 2>/tmp/tg-curl.err)
@@ -47,13 +47,13 @@ jobs:
           TG_OK=$(jq -r '.ok // false' /tmp/tg.json 2>/dev/null)
 
           if [ "$TG_RC" -eq 0 ] && [ "$TG_CODE" = "200" ] && [ "$TG_OK" = "true" ]; then
-            REPORT="${REPORT}вњ… Telegram Magic${NL}"
+            REPORT="${REPORT}✅ Telegram Magic${NL}"
           else
             FAIL=1
             [ -z "$TG_CODE" ] && TG_CODE="no HTTP response"
             TG_DESC=$(jq -r '.description // empty' /tmp/tg.json 2>/dev/null)
-            [ -n "$TG_DESC" ] && TG_DESC=" вЂ” ${TG_DESC}"
-            REPORT="${REPORT}вќЊ Telegram Magic вЂ” HTTP ${TG_CODE}${TG_DESC}${NL}"
+            [ -n "$TG_DESC" ] && TG_DESC=" — ${TG_DESC}"
+            REPORT="${REPORT}❌ Telegram Magic — HTTP ${TG_CODE}${TG_DESC}${NL}"
           fi
 
           OPENAI_PAYLOAD='{
@@ -67,27 +67,27 @@ jobs:
           OAI_RC=$?
 
           if [ "$OAI_RC" -eq 0 ] && [ "$OAI_CODE" -ge 200 ] 2>/dev/null && [ "$OAI_CODE" -lt 300 ] 2>/dev/null; then
-            REPORT="${REPORT}вњ… OpenAI API${NL}"
+            REPORT="${REPORT}✅ OpenAI API${NL}"
           else
             FAIL=1
             [ -z "$OAI_CODE" ] && OAI_CODE="no HTTP response"
             OAI_DETAIL=$(jq -r '.error.code // .error.type // .error.message // empty' /tmp/openai.json 2>/dev/null)
             if [ -n "$OAI_DETAIL" ]; then
               OAI_DETAIL=$(printf '%s' "$OAI_DETAIL" | tr '\n' ' ' | cut -c1-120)
-              OAI_DETAIL=" вЂ” ${OAI_DETAIL}"
+              OAI_DETAIL=" — ${OAI_DETAIL}"
             fi
-            REPORT="${REPORT}вќЊ OpenAI API вЂ” HTTP ${OAI_CODE}${OAI_DETAIL}${NL}"
+            REPORT="${REPORT}❌ OpenAI API — HTTP ${OAI_CODE}${OAI_DETAIL}${NL}"
           fi
 
           NOW=$(TZ=Asia/Novosibirsk date '+%d.%m.%Y %H:%M')
           HOUR=$(TZ=Asia/Novosibirsk date '+%H')
 
           if [ "$FAIL" -ne 0 ]; then
-            MESSAGE="рџљЁ PERSONAL AI PROD${NL}${NL}${REPORT}${NL}${NOW}"
+            MESSAGE="🚨 PERSONAL AI PROD${NL}${NL}${REPORT}${NL}${NOW}"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            MESSAGE="вњ… PERSONAL AI PROD вЂ” СЂСѓС‡РЅР°СЏ РїСЂРѕРІРµСЂРєР°${NL}${NL}${REPORT}${NL}${NOW}"
+            MESSAGE="✅ PERSONAL AI PROD — ручная проверка${NL}${NL}${REPORT}${NL}${NOW}"
           elif [ "$HOUR" = "10" ]; then
-            MESSAGE="вњ… PERSONAL AI PROD вЂ” РІСЃС‘ СЂР°Р±РѕС‚Р°РµС‚${NL}${NL}${REPORT}${NL}${NOW}"
+            MESSAGE="✅ PERSONAL AI PROD — всё работает${NL}${NL}${REPORT}${NL}${NOW}"
           else
             echo "All checks passed; silent scheduled run."
             exit 0
