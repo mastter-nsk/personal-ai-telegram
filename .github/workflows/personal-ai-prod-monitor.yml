@@ -30,7 +30,6 @@ jobs:
           NL=$'\n'
           REPORT=""
 
-          # n8n + Postgres
           N8N_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
             --output /tmp/n8n.txt --write-out '%{http_code}' \
             "$N8N_HEALTH_URL" 2>/tmp/n8n-curl.err)
@@ -44,7 +43,6 @@ jobs:
             REPORT="${REPORT}FAIL n8n / Postgres - HTTP ${N8N_CODE}${NL}"
           fi
 
-          # Telegram production bot token
           TG_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
             --output /tmp/tg.json --write-out '%{http_code}' \
             "https://api.telegram.org/bot${MAGIC_BOT_TOKEN}/getMe" 2>/tmp/tg-curl.err)
@@ -61,32 +59,35 @@ jobs:
             REPORT="${REPORT}FAIL Telegram Magic - HTTP ${TG_CODE}${TG_DESC}${NL}"
           fi
 
-          # OpenAI: build JSON with jq so shell/copy-paste cannot corrupt it.
-          # No max_output_tokens: avoids model-specific minimum-token validation.
-          OPENAI_PAYLOAD=$(jq -nc \
-            --arg model "gpt-5.6-luna" \
-            --arg input "Reply with exactly: OK" \
-            '{model:$model,input:$input,reasoning:{effort:"none"}}')
+          cat > /tmp/openai-payload.json <<'JSON'
+          {"model":"gpt-5.6-luna","input":"Reply with exactly: OK"}
+          JSON
 
-          OAI_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 45 \
-            --output /tmp/openai.json --write-out '%{http_code}' \
-            https://api.openai.com/v1/responses \
-            -H "Authorization: Bearer ${OPENAI_API_KEY}" \
-            -H "Content-Type: application/json" \
-            --data-binary "$OPENAI_PAYLOAD" 2>/tmp/oai-curl.err)
-          OAI_RC=$?
-
-          if [ "$OAI_RC" -eq 0 ] && [ "$OAI_CODE" -ge 200 ] 2>/dev/null && [ "$OAI_CODE" -lt 300 ] 2>/dev/null; then
-            REPORT="${REPORT}OK OpenAI API${NL}"
-          else
+          if ! jq -e . /tmp/openai-payload.json >/dev/null 2>&1; then
             FAIL=1
-            [ -z "$OAI_CODE" ] && OAI_CODE="no HTTP response"
-            OAI_DETAIL=$(jq -r '.error.code // .error.type // .error.message // empty' /tmp/openai.json 2>/dev/null)
-            if [ -n "$OAI_DETAIL" ]; then
-              OAI_DETAIL=$(printf '%s' "$OAI_DETAIL" | tr '\n' ' ' | cut -c1-160)
-              OAI_DETAIL=" - ${OAI_DETAIL}"
+            REPORT="${REPORT}FAIL OpenAI monitor payload - invalid local JSON${NL}"
+            OAI_CODE="local-json-error"
+          else
+            OAI_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 45 \
+              --output /tmp/openai.json --write-out '%{http_code}' \
+              https://api.openai.com/v1/responses \
+              -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+              -H "Content-Type: application/json" \
+              --data-binary @/tmp/openai-payload.json 2>/tmp/oai-curl.err)
+            OAI_RC=$?
+
+            if [ "$OAI_RC" -eq 0 ] && [ "$OAI_CODE" -ge 200 ] 2>/dev/null && [ "$OAI_CODE" -lt 300 ] 2>/dev/null; then
+              REPORT="${REPORT}OK OpenAI API${NL}"
+            else
+              FAIL=1
+              [ -z "$OAI_CODE" ] && OAI_CODE="no HTTP response"
+              OAI_DETAIL=$(jq -r '.error.code // .error.type // .error.message // empty' /tmp/openai.json 2>/dev/null)
+              if [ -n "$OAI_DETAIL" ]; then
+                OAI_DETAIL=$(printf '%s' "$OAI_DETAIL" | tr '\n' ' ' | cut -c1-160)
+                OAI_DETAIL=" - ${OAI_DETAIL}"
+              fi
+              REPORT="${REPORT}FAIL OpenAI API - HTTP ${OAI_CODE}${OAI_DETAIL}${NL}"
             fi
-            REPORT="${REPORT}FAIL OpenAI API - HTTP ${OAI_CODE}${OAI_DETAIL}${NL}"
           fi
 
           NOW=$(TZ=Asia/Novosibirsk date '+%d.%m.%Y %H:%M')
