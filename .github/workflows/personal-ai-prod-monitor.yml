@@ -26,74 +26,88 @@ jobs:
         shell: bash
         run: |
           set +e
-
           FAIL=0
           NL=$'\n'
           REPORT=""
 
-          N8N_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 20             --output /tmp/n8n.txt --write-out '%{http_code}'             "$N8N_HEALTH_URL" 2>/tmp/n8n-curl.err)
+          # n8n + Postgres
+          N8N_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
+            --output /tmp/n8n.txt --write-out '%{http_code}' \
+            "$N8N_HEALTH_URL" 2>/tmp/n8n-curl.err)
           N8N_RC=$?
 
           if [ "$N8N_RC" -eq 0 ] && [ "$N8N_CODE" = "200" ]; then
-            REPORT="${REPORT}✅ n8n / Postgres${NL}"
+            REPORT="${REPORT}OK n8n / Postgres${NL}"
           else
             FAIL=1
             [ -z "$N8N_CODE" ] && N8N_CODE="no HTTP response"
-            REPORT="${REPORT}❌ n8n / Postgres — HTTP ${N8N_CODE}${NL}"
+            REPORT="${REPORT}FAIL n8n / Postgres - HTTP ${N8N_CODE}${NL}"
           fi
 
-          TG_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 20             --output /tmp/tg.json --write-out '%{http_code}'             "https://api.telegram.org/bot${MAGIC_BOT_TOKEN}/getMe" 2>/tmp/tg-curl.err)
+          # Telegram production bot token
+          TG_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
+            --output /tmp/tg.json --write-out '%{http_code}' \
+            "https://api.telegram.org/bot${MAGIC_BOT_TOKEN}/getMe" 2>/tmp/tg-curl.err)
           TG_RC=$?
           TG_OK=$(jq -r '.ok // false' /tmp/tg.json 2>/dev/null)
 
           if [ "$TG_RC" -eq 0 ] && [ "$TG_CODE" = "200" ] && [ "$TG_OK" = "true" ]; then
-            REPORT="${REPORT}✅ Telegram Magic${NL}"
+            REPORT="${REPORT}OK Telegram Magic${NL}"
           else
             FAIL=1
             [ -z "$TG_CODE" ] && TG_CODE="no HTTP response"
             TG_DESC=$(jq -r '.description // empty' /tmp/tg.json 2>/dev/null)
-            [ -n "$TG_DESC" ] && TG_DESC=" — ${TG_DESC}"
-            REPORT="${REPORT}❌ Telegram Magic — HTTP ${TG_CODE}${TG_DESC}${NL}"
+            [ -n "$TG_DESC" ] && TG_DESC=" - ${TG_DESC}"
+            REPORT="${REPORT}FAIL Telegram Magic - HTTP ${TG_CODE}${TG_DESC}${NL}"
           fi
 
-          OPENAI_PAYLOAD='{
-            "model": "gpt-5.6-luna",
-            "input": "Reply with exactly: OK",
-            "reasoning": {"effort": "none"},
-            "max_output_tokens": 8
-          }'
+          # OpenAI: build JSON with jq so shell/copy-paste cannot corrupt it.
+          # No max_output_tokens: avoids model-specific minimum-token validation.
+          OPENAI_PAYLOAD=$(jq -nc \
+            --arg model "gpt-5.6-luna" \
+            --arg input "Reply with exactly: OK" \
+            '{model:$model,input:$input,reasoning:{effort:"none"}}')
 
-          OAI_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 45             --output /tmp/openai.json --write-out '%{http_code}'             https://api.openai.com/v1/responses             -H "Authorization: Bearer ${OPENAI_API_KEY}"             -H "Content-Type: application/json"             -d "$OPENAI_PAYLOAD" 2>/tmp/oai-curl.err)
+          OAI_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 45 \
+            --output /tmp/openai.json --write-out '%{http_code}' \
+            https://api.openai.com/v1/responses \
+            -H "Authorization: Bearer ${OPENAI_API_KEY}" \
+            -H "Content-Type: application/json" \
+            --data-binary "$OPENAI_PAYLOAD" 2>/tmp/oai-curl.err)
           OAI_RC=$?
 
           if [ "$OAI_RC" -eq 0 ] && [ "$OAI_CODE" -ge 200 ] 2>/dev/null && [ "$OAI_CODE" -lt 300 ] 2>/dev/null; then
-            REPORT="${REPORT}✅ OpenAI API${NL}"
+            REPORT="${REPORT}OK OpenAI API${NL}"
           else
             FAIL=1
             [ -z "$OAI_CODE" ] && OAI_CODE="no HTTP response"
             OAI_DETAIL=$(jq -r '.error.code // .error.type // .error.message // empty' /tmp/openai.json 2>/dev/null)
             if [ -n "$OAI_DETAIL" ]; then
-              OAI_DETAIL=$(printf '%s' "$OAI_DETAIL" | tr '\n' ' ' | cut -c1-120)
-              OAI_DETAIL=" — ${OAI_DETAIL}"
+              OAI_DETAIL=$(printf '%s' "$OAI_DETAIL" | tr '\n' ' ' | cut -c1-160)
+              OAI_DETAIL=" - ${OAI_DETAIL}"
             fi
-            REPORT="${REPORT}❌ OpenAI API — HTTP ${OAI_CODE}${OAI_DETAIL}${NL}"
+            REPORT="${REPORT}FAIL OpenAI API - HTTP ${OAI_CODE}${OAI_DETAIL}${NL}"
           fi
 
           NOW=$(TZ=Asia/Novosibirsk date '+%d.%m.%Y %H:%M')
           HOUR=$(TZ=Asia/Novosibirsk date '+%H')
 
           if [ "$FAIL" -ne 0 ]; then
-            MESSAGE="🚨 PERSONAL AI PROD${NL}${NL}${REPORT}${NL}${NOW}"
+            MESSAGE="ALERT: PERSONAL AI PROD${NL}${NL}${REPORT}${NL}${NOW}"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            MESSAGE="✅ PERSONAL AI PROD — ручная проверка${NL}${NL}${REPORT}${NL}${NOW}"
+            MESSAGE="PERSONAL AI PROD - manual check${NL}${NL}${REPORT}${NL}${NOW}"
           elif [ "$HOUR" = "10" ]; then
-            MESSAGE="✅ PERSONAL AI PROD — всё работает${NL}${NL}${REPORT}${NL}${NOW}"
+            MESSAGE="PERSONAL AI PROD - all systems OK${NL}${NL}${REPORT}${NL}${NOW}"
           else
             echo "All checks passed; silent scheduled run."
             exit 0
           fi
 
-          SEND_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 20             --output /tmp/send.json --write-out '%{http_code}'             -X POST "https://api.telegram.org/bot${MONITOR_BOT_TOKEN}/sendMessage"             --data-urlencode "chat_id=${ALERT_CHAT_ID}"             --data-urlencode "text=${MESSAGE}")
+          SEND_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 20 \
+            --output /tmp/send.json --write-out '%{http_code}' \
+            -X POST "https://api.telegram.org/bot${MONITOR_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${ALERT_CHAT_ID}" \
+            --data-urlencode "text=${MESSAGE}")
 
           if [ "$SEND_CODE" != "200" ]; then
             echo "Failed to send Telegram alert (HTTP $SEND_CODE)."
