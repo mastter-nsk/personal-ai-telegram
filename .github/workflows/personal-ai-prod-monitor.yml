@@ -61,7 +61,7 @@ jobs:
             REPORT="${REPORT}FAIL Telegram Magic - HTTP ${TG_CODE}${TG_DESC}${NL}"
           fi
 
-          # 3) OpenAI authentication/model access - GET, no JSON body.
+          # 3) OpenAI auth/model access - GET request, no JSON body.
           AUTH_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
             --output /tmp/openai-auth.json --write-out '%{http_code}' \
             https://api.openai.com/v1/models/gpt-5.6-luna \
@@ -81,39 +81,72 @@ jobs:
             REPORT="${REPORT}FAIL OpenAI auth - HTTP ${AUTH_CODE}${AUTH_MSG}${NL}"
           fi
 
-          # 4) Tiny real generation request. Uses the same minimal shape as the
-          # official Responses API examples and avoids generated/heredoc JSON.
+          # 4) Real Responses API generation via Python stdlib.
+          # Python json.dumps serializes the request body, avoiding shell/curl quoting issues.
           if [ "$AUTH_OK" = "1" ]; then
-            OAI_CODE=$(curl --silent --show-error --connect-timeout 10 --max-time 45 \
-              --dump-header /tmp/openai.headers \
-              --output /tmp/openai.json --write-out '%{http_code}' \
-              https://api.openai.com/v1/responses \
-              -H "Authorization: Bearer ${OPENAI_API_KEY}" \
-              -H "Content-Type: application/json" \
-              --data '{"model":"gpt-5.6-luna","input":"Reply with exactly: OK"}' \
-              2>/tmp/oai-curl.err)
-            OAI_RC=$?
+            python3 - <<'PY'
+          import json
+          import os
+          import urllib.request
+          import urllib.error
 
-            if [ "$OAI_RC" -eq 0 ] && [ "$OAI_CODE" -ge 200 ] 2>/dev/null && [ "$OAI_CODE" -lt 300 ] 2>/dev/null; then
+          url = "https://api.openai.com/v1/responses"
+          payload = {
+              "model": "gpt-5.6-luna",
+              "input": "Reply with exactly: OK"
+          }
+          data = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+          req = urllib.request.Request(
+              url,
+              data=data,
+              method="POST",
+              headers={
+                  "Authorization": "Bearer " + os.environ["OPENAI_API_KEY"],
+                  "Content-Type": "application/json",
+                  "Accept": "application/json",
+              },
+          )
+
+          result = {"ok": False, "http": 0, "code": "", "message": ""}
+          try:
+              with urllib.request.urlopen(req, timeout=45) as resp:
+                  body = resp.read().decode("utf-8", "replace")
+                  result["http"] = resp.status
+                  result["ok"] = 200 <= resp.status < 300
+                  if result["ok"]:
+                      parsed = json.loads(body)
+                      result["response_id"] = parsed.get("id", "")
+          except urllib.error.HTTPError as e:
+              result["http"] = e.code
+              body = e.read().decode("utf-8", "replace")
+              try:
+                  parsed = json.loads(body)
+                  err = parsed.get("error") or {}
+                  result["code"] = str(err.get("code") or err.get("type") or "")
+                  result["message"] = str(err.get("message") or "")
+              except Exception:
+                  result["message"] = body[:220]
+          except Exception as e:
+              result["message"] = str(e)
+
+          with open("/tmp/openai-generation.json", "w", encoding="utf-8") as f:
+              json.dump(result, f)
+          PY
+
+            OAI_OK=$(jq -r '.ok // false' /tmp/openai-generation.json 2>/dev/null)
+            OAI_CODE=$(jq -r '.http // 0' /tmp/openai-generation.json 2>/dev/null)
+
+            if [ "$OAI_OK" = "true" ]; then
               REPORT="${REPORT}OK OpenAI generation${NL}"
             else
               FAIL=1
-              [ -z "$OAI_CODE" ] && OAI_CODE="no HTTP response"
-              ERR_CODE=$(jq -r '.error.code // .error.type // "unknown_error"' /tmp/openai.json 2>/dev/null)
-              ERR_MSG=$(jq -r '.error.message // empty' /tmp/openai.json 2>/dev/null)
-              ERR_PARAM=$(jq -r '.error.param // empty' /tmp/openai.json 2>/dev/null)
+              ERR_CODE=$(jq -r '.code // empty' /tmp/openai-generation.json 2>/dev/null)
+              ERR_MSG=$(jq -r '.message // empty' /tmp/openai-generation.json 2>/dev/null)
               ERR_MSG=$(printf '%s' "$ERR_MSG" | tr '\n' ' ' | cut -c1-220)
               DETAIL="${ERR_CODE}"
-              [ -n "$ERR_PARAM" ] && DETAIL="${DETAIL}; param=${ERR_PARAM}"
-              [ -n "$ERR_MSG" ] && DETAIL="${DETAIL}; ${ERR_MSG}"
-              REPORT="${REPORT}FAIL OpenAI generation - HTTP ${OAI_CODE} - ${DETAIL}${NL}"
-
-              echo "OpenAI generation failed."
-              echo "HTTP: ${OAI_CODE}"
-              echo "Error code: ${ERR_CODE}"
-              echo "Error param: ${ERR_PARAM}"
-              echo "Error message: ${ERR_MSG}"
-              grep -i '^x-request-id:' /tmp/openai.headers || true
+              [ -n "$ERR_MSG" ] && DETAIL="${DETAIL}${DETAIL:+; }${ERR_MSG}"
+              REPORT="${REPORT}FAIL OpenAI generation - HTTP ${OAI_CODE}${DETAIL:+ - ${DETAIL}}${NL}"
             fi
           fi
 
