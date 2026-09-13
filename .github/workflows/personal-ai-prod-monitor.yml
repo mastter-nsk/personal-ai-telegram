@@ -39,11 +39,11 @@ jobs:
           N8N_RC=$?
 
           if [ "$N8N_RC" -eq 0 ] && [ "$N8N_CODE" = "200" ]; then
-            REPORT="${REPORT}OK n8n / Postgres${NL}"
+            REPORT="${REPORT}✅ n8n / Postgres${NL}"
           else
             FAIL=1
             [ -z "$N8N_CODE" ] && N8N_CODE="no HTTP response"
-            REPORT="${REPORT}FAIL n8n / Postgres - HTTP ${N8N_CODE}${NL}"
+            REPORT="${REPORT}❌ n8n / Postgres - HTTP ${N8N_CODE}${NL}"
           fi
 
           # 2) Production Telegram bot token
@@ -54,13 +54,13 @@ jobs:
           TG_OK=$(jq -r '.ok // false' /tmp/tg.json 2>/dev/null)
 
           if [ "$TG_RC" -eq 0 ] && [ "$TG_CODE" = "200" ] && [ "$TG_OK" = "true" ]; then
-            REPORT="${REPORT}OK Telegram Magic${NL}"
+            REPORT="${REPORT}✅ Telegram Magic${NL}"
           else
             FAIL=1
             [ -z "$TG_CODE" ] && TG_CODE="no HTTP response"
             TG_DESC=$(jq -r '.description // empty' /tmp/tg.json 2>/dev/null)
             [ -n "$TG_DESC" ] && TG_DESC=" - ${TG_DESC}"
-            REPORT="${REPORT}FAIL Telegram Magic - HTTP ${TG_CODE}${TG_DESC}${NL}"
+            REPORT="${REPORT}❌ Telegram Magic - HTTP ${TG_CODE}${TG_DESC}${NL}"
           fi
 
           # 3) OpenAI auth/model access - GET request, no JSON body.
@@ -71,7 +71,7 @@ jobs:
           AUTH_RC=$?
 
           if [ "$AUTH_RC" -eq 0 ] && [ "$AUTH_CODE" = "200" ]; then
-            REPORT="${REPORT}OK OpenAI auth${NL}"
+            REPORT="${REPORT}✅ OpenAI auth${NL}"
             AUTH_OK=1
           else
             FAIL=1
@@ -80,7 +80,7 @@ jobs:
             AUTH_MSG=$(jq -r '.error.message // empty' /tmp/openai-auth.json 2>/dev/null)
             [ -n "$AUTH_MSG" ] && AUTH_MSG=$(printf '%s' "$AUTH_MSG" | tr '\n' ' ' | cut -c1-180)
             [ -n "$AUTH_MSG" ] && AUTH_MSG=" - ${AUTH_MSG}"
-            REPORT="${REPORT}FAIL OpenAI auth - HTTP ${AUTH_CODE}${AUTH_MSG}${NL}"
+            REPORT="${REPORT}❌ OpenAI auth - HTTP ${AUTH_CODE}${AUTH_MSG}${NL}"
           fi
 
           # 4) Real Responses API generation via Python stdlib.
@@ -140,7 +140,7 @@ jobs:
             OAI_CODE=$(jq -r '.http // 0' /tmp/openai-generation.json 2>/dev/null)
 
             if [ "$OAI_OK" = "true" ]; then
-              REPORT="${REPORT}OK OpenAI generation${NL}"
+              REPORT="${REPORT}✅ OpenAI generation${NL}"
             else
               FAIL=1
               ERR_CODE=$(jq -r '.code // empty' /tmp/openai-generation.json 2>/dev/null)
@@ -148,17 +148,17 @@ jobs:
               ERR_MSG=$(printf '%s' "$ERR_MSG" | tr '\n' ' ' | cut -c1-220)
               DETAIL="${ERR_CODE}"
               [ -n "$ERR_MSG" ] && DETAIL="${DETAIL}${DETAIL:+; }${ERR_MSG}"
-              REPORT="${REPORT}FAIL OpenAI generation - HTTP ${OAI_CODE}${DETAIL:+ - ${DETAIL}}${NL}"
+              REPORT="${REPORT}❌ OpenAI generation - HTTP ${OAI_CODE}${DETAIL:+ - ${DETAIL}}${NL}"
             fi
           fi
 
           NOW=$(TZ=Asia/Novosibirsk date '+%d.%m.%Y %H:%M')
           if [ "$FAIL" -ne 0 ]; then
-            MESSAGE="ALERT: PERSONAL AI PROD${NL}${NL}${REPORT}${NL}${NOW}"
+            MESSAGE="🚨 PERSONAL AI PROD${NL}${NL}${REPORT}${NL}${NOW}"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            MESSAGE="PERSONAL AI PROD - manual check${NL}${NL}${REPORT}${NL}${NOW}"
+            MESSAGE="🧪 PERSONAL AI PROD - manual check${NL}${NL}${REPORT}${NL}${NOW}"
           elif [ "${{ github.event.schedule }}" = "17 10 * * *" ]; then
-            MESSAGE="PERSONAL AI PROD - all systems OK${NL}${NL}${REPORT}${NL}${NOW}"
+            MESSAGE="✅ PERSONAL AI PROD - all systems OK${NL}${NL}${REPORT}${NL}${NOW}"
           else
             echo "All checks passed; silent scheduled run."
             exit 0
