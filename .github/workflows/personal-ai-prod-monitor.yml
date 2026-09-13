@@ -3,7 +3,9 @@ name: Personal AI PROD Monitor
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 1,4,7,10,13,16,19,22 * * *'
+    - cron: '17 1,4,7,13,16,19,22 * * *'
+      timezone: 'Asia/Novosibirsk'
+    - cron: '17 10 * * *'
       timezone: 'Asia/Novosibirsk'
 
 permissions:
@@ -151,13 +153,11 @@ jobs:
           fi
 
           NOW=$(TZ=Asia/Novosibirsk date '+%d.%m.%Y %H:%M')
-          HOUR=$(TZ=Asia/Novosibirsk date '+%H')
-
           if [ "$FAIL" -ne 0 ]; then
             MESSAGE="ALERT: PERSONAL AI PROD${NL}${NL}${REPORT}${NL}${NOW}"
           elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             MESSAGE="PERSONAL AI PROD - manual check${NL}${NL}${REPORT}${NL}${NOW}"
-          elif [ "$HOUR" = "10" ]; then
+          elif [ "${{ github.event.schedule }}" = "17 10 * * *" ]; then
             MESSAGE="PERSONAL AI PROD - all systems OK${NL}${NL}${REPORT}${NL}${NOW}"
           else
             echo "All checks passed; silent scheduled run."
